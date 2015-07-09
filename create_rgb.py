@@ -25,9 +25,9 @@ stack_filter=['i','g','u']
 stack_filter_ref='i'
 stack_version='1'
 
-stack_im_file=['im_tileX_i.003.fits','im_tileX_g_ALIGNi.003.fits','im_tileX_u_ALIGNi.003.fits']
-stack_weight_file=['im_tileX_i.003.WEIGHT.fits','im_tileX_g_ALIGNi.003.WEIGHT.fits','im_tileX_u_ALIGNi.003.WEIGHT.fits']
-stack_mask_file=['im_tileX_i.003.MASK.fits','im_tileX_g_ALIGNi.003.MASK.fits','im_tileX_u_ALIGNi.003.MASK.fits']
+stack_im_file=['im_tileX_i.fits','im_tileX_g_ALIGNi.fits','im_tileX_u_ALIGNi.fits']
+stack_weight_file=['im_tileX_i.WEIGHT.fits','im_tileX_g_ALIGNi.WEIGHT.fits','im_tileX_u_ALIGNi.WEIGHT.fits']
+stack_mask_file=['im_tileX_i.MASK.fits','im_tileX_g_ALIGNi.MASK.fits','im_tileX_u_ALIGNi.MASK.fits']
 
 stack_im_file_full = [[stack_dir+'/'+im_file.replace('tileX','tile'+im_tile) for im_file in stack_im_file] for im_tile in stack_tile]
 stack_weight_file_full = [[stack_dir+'/'+im_file.replace('tileX','tile'+im_tile) for im_file in stack_weight_file] for im_tile in stack_tile]
