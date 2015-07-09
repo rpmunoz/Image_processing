@@ -78,4 +78,4 @@ unsharp = nosource-mask*w
 #Write the unsharp mask
 print "\nWriting unsharp-masked image..."
 pyfits.writeto('%sunsharp.fits' % prefixout,unsharp,header,clobber=True)
-print "Done in %5.2f minutes." % ((datetime.now() - startime)/60.)
+print "Done in %5.2f minutes." % ((datetime.now() - start_time)/60.)
