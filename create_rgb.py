@@ -1,5 +1,5 @@
-# Create RGB image from DECam data
-# Copyright 2014, 2015 Roberto Pablo Mu~noz, All rights reserved
+# Create RGB images for big astronomical images (DECam,VISTA,VST)
+# Copyright 2014, 2015 Roberto Pablo Munoz, All rights reserved
 #
 # This product includes software developed by
 # Roberto Pablo Mu~noz in Santiago, Chile
