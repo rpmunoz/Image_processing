@@ -66,15 +66,15 @@ pyfits.writeto('%snosource.fits' % prefixout,nosource,header,clobber=True)
 #Blur the source-free original
 filt_size = 25
 print "Blurring image with %i-pixel median filter..." % filt_size
-mask = nd.median_filter(nosource,filt_size)
+blurred = nd.median_filter(nosource,filt_size)
 print "Done."
 
 #Write the blurred image
 print "\nWriting blurred image..."
-pyfits.writeto('%smask.fits' % prefixout,mask,header,clobber=True)
+pyfits.writeto('%sblurred.fits' % prefixout,mask,header,clobber=True)
 w = 1.
 print "\nSubtracting blurred image from original cutout..."
-unsharp = nosource-mask*w
+unsharp = nosource-blurred*w
 #Write the unsharp mask
 print "\nWriting unsharp-masked image..."
 pyfits.writeto('%sunsharp.fits' % prefixout,unsharp,header,clobber=True)
