@@ -12,7 +12,7 @@ prefixin = '/Volumes/MyPassport/SCABSworkbench/'
 prefixout = '/Volumes/MyPassport/SCABSworkbench/'
 
 image_file = '%ssurvey_tile1_i_short.fits' % prefixin
-mask_file = '%ssurvey_tile1_i_short.MASK.fits' % prefixin
+mask_file = '%ssurvey_tile1_i_short.CHECK_SEGMENTATION.fits' % prefixin
 
 if len(sys.argv) < 2:
 	print "ERROR - missing cutout type"
@@ -58,7 +58,7 @@ if sys.argv[1] == 'full':
 #Create the original mask
 print "\nMasking image..."
 nosource = cutout
-bv_mask = (mask_cutout == 1.)
+bv_mask = (mask_cutout != 0.)
 nosource[bv_mask]=np.nan
 print "Writing masked image..."
 pyfits.writeto('%snosource.fits' % prefixout,nosource,header,clobber=True)
