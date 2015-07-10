@@ -1,10 +1,15 @@
-def open_im(image):
+def load_im(image,array):
+	ii=0
 	hdulist = pyfits.open(image)
-	temp_image_data = hdulist[1].data
-	temp_image_h = hdulist[0].header
+	for hdu in hdulist:
+		im_dim=(4094, 2096) #hdu.shape
+		im_ndim=len(im_dim)
+		if im_ndim==2:
+			array[0,ii,:,:]=hdu.data
+			ii+=1
+			print ii
 	hdulist.close()
-	
-	return temp_image_data, temp_image_h
+	return array
 
 def weight_scale(im,weight):
 	temp_im_data, temp_im_h = open_im(im)
@@ -49,8 +54,30 @@ mask_dir = '/Volumes/MyPassport/masks/'
 test_image = im_dir+'survey_t'+do_tile+'_d'+do_dither+'_'+do_filt+'_short.fits'
 test_weight = im_dir+'survey_t'+do_tile+'_d'+do_dither+'_'+do_filt+'_short.WEIGHT.fits'
 
-#Open image file, and scale it by the weight map
-im_data, im_h = weight_scale(test_image,test_weight)
+#Open image file, and scale it by the weight map SHOULD THE IMAGE BE SCALED????
+hdulist = pyfits.open(test_image)
+im_nchip=0
+for hdu in hdulist:
+#	print hdu.header['NAXIS']
+	if hdu.header['NAXIS'] != 0:
+		hdu = np.array(hdu)
+		im_dim= (4094, 2046) #hdu.shape
+		print im_dim
+		im_ndim=len(im_dim)
+		print im_ndim
+		if im_ndim==2:
+			if im_nchip==0: im_size=im_dim
+			im_nchip+=1
+hdulist.close()
+
+im_data = np.zeros((1,im_nchip,im_size[0],im_size[1]))
+print im_data
+im_data = load_im(test_image,im_data)
+print im_data
+exit()
+#weight_data = im_data
+
+
 
 ####Open background and mask files and scale them by weight maps
 #Determine the background files closest in time to the image
@@ -99,6 +126,32 @@ print mask_ims
 
 #Scale and mask the background images
 ####NEED TO CREATE THE CUBE HERE
+
+# im_file=['fornax_t1_d1_g.fits','fornax_t1_d2_g.fits','fornax_t1_d3_g.fits']
+# 
+# hdulist = pyfits.open(im_file[0])
+# im_nchip=0
+# for hdu in hdulist:
+#   im_dim=hdu.shape
+#   im_ndim=len(im_dim)
+#   if im_ndim==2:
+#     if im_nchip==0: im_size=im_dim
+#     im_nchip+=1
+# hdulist.close()
+# 
+# im_data_cube=np.zeros( (len(im_file), im_nchip, im_size[0], im_size[1]) )
+# 
+# for i in range(len(im_file)):
+#   j=0
+#   hdulist = pyfits.open(im_file[i])
+#   for hdu in hdulist:
+#     im_dim=hdu.shape
+#     im_ndim=len(im_dim)
+#     if im_ndim==2:
+#       im_data_cube[i,j,:,:]=hdu.data
+#       j+=1
+#   hdulist.close()
+
 for ii in range(len(back_ims)):
 	if back_ims[0] == back_weights[0].replace('WEIGHT.','') and back_ims[0] == mask_ims[0].replace('MASK.',''):
 		print back_ims[ii], mask_ims[ii]
