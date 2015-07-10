@@ -48,11 +48,15 @@ do_dither = '1'
 do_filt = 'i'
 n_backs = 2
 
-back_dir = '/Volumes/MyPassport/masks/'
-mask_dir = '/Volumes/MyPassport/masks/'
+#back_dir = '/Volumes/MyPassport/masks/'
+#mask_dir = '/Volumes/MyPassport/masks/'
+back_dir = '/Volumes/matt/2014A-0610/pipeline/images/'
+mask_dir = '/Volumes/matt/2014A-0610/pipeline/images/'
 
 test_image = im_dir+'survey_t'+do_tile+'_d'+do_dither+'_'+do_filt+'_short.fits'
 test_weight = im_dir+'survey_t'+do_tile+'_d'+do_dither+'_'+do_filt+'_short.WEIGHT.fits'
+print test_image
+exit()
 
 #Open image file, and scale it by the weight map SHOULD THE IMAGE BE SCALED????
 hdulist = pyfits.open(test_image)
