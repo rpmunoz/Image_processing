@@ -20,28 +20,33 @@ def find_nearest(array,nvals,val):
 	inds = np.array(inds)
 	return inds
 
-def median_subtract(back_cube,med_data,image,chip):
+def median_subtract(back_cube,med_data,image,chip_num,q):
+	#print "Processing Chip #%i..." % (chip+1)
+	#med_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+	print "median_subtract"
 	for ii in range(im_size[0]):
 	  for jj in range(im_size[1]):
-		back_vals = []
-		for kk in range(n_backs):
-		  back_vals.append(back_cube[kk][chip][ii][jj])
-		med_data[0][chip][ii][jj] = np.median(back_vals)
-	image[0][chip] = image[0][chip] - med_data[0][chip]
-	return image, med_data
+		med_data[ii][jj] = np.median([back_cube[kk][chip_num][ii][jj] for kk in range(len(back_cube))])
+
+	print "subtracting background"
+	image = image-med_data
+	print "returning data"
+	q.put([image, med_data])
+
 
 import pyfits
 import numpy as np
 import glob
+from multiprocessing import Process, Queue
 import matplotlib.pyplot as plt
-from scipy import interpolate
-from scipy import ndimage
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib import cm
+# from scipy import interpolate
+# from scipy import ndimage
+# from mpl_toolkits.mplot3d import Axes3D
+# from matplotlib import cm
 import sys
-from datetime import datetime
+import time
 
-start_time = datetime.now()
+start_time = time.time()
 
 if len(sys.argv) < 2 :
 	print "ERROR - missing subtraction method"
@@ -183,26 +188,92 @@ for ii in range(len(mask_ims)):
 		back_im_cube[ii][jj][bv_mask] = np.nan
 		#print "Median of Chip #%i after masking: %7.3f" % (jj+1, np.median(back_im_cube[ii][jj]))
 
-#print back_im_cube[0][0][0][0], back_im_cube[1][0][0][0], back_im_cube[2][0][0][0]
-#print back_im_cube[0][0][100][0], back_im_cube[1][0][100][0], back_im_cube[2][0][100][0]
-
 ########################################################################
 ####Calculate the background level from all of the background images####
 ########################################################################
 
+print "Chip #1 before subtraction:"
+print back_im_cube[0][0][0][0], back_im_cube[1][0][0][0], back_im_cube[2][0][0][0]
+print np.median([back_im_cube[0][0][0][0], back_im_cube[1][0][0][0], back_im_cube[2][0][0][0]])
 print im_data[0][0][0][0]
+print "Chip #2 before subtraction:"
+print back_im_cube[0][1][0][0], back_im_cube[1][1][0][0], back_im_cube[2][1][0][0]
+print np.median([back_im_cube[0][1][0][0], back_im_cube[1][1][0][0], back_im_cube[2][1][0][0]])
+print im_data[0][1][0][0]
+print "Chip #3 before subtraction:"
+print back_im_cube[0][2][0][0], back_im_cube[1][2][0][0], back_im_cube[2][2][0][0]
+print np.median([back_im_cube[0][2][0][0], back_im_cube[1][2][0][0], back_im_cube[2][2][0][0]])
+print im_data[0][2][0][0]
+print "Chip #4 before subtraction:"
+print back_im_cube[0][3][0][0], back_im_cube[1][3][0][0], back_im_cube[2][3][0][0]
+print np.median([back_im_cube[0][3][0][0], back_im_cube[1][3][0][0], back_im_cube[2][3][0][0]])
+print im_data[0][3][0][0]
 
 #Median background subtraction
 if sys.argv[1] == 'median':
-	for chip_num in range(im_nchip):
-		med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
-		im_data, med_back_data = median_subtract(back_im_cube,med_back_data,im_data,chip_num)
+	q = Queue()
+	results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
+	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
 
-#print med_back_data[0][0][0][0]
-#print im_data[0][0][0][0]
+# 	for chip_num in range(1):#range(im_nchip):
+# 		med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+# 		print "Processing Chip #%i" % (chip_num+1)
+# 		p1 = Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num],im_data[0][chip_num],chip_num,q))		
+# 		p2 = Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+1],im_data[0][chip_num+1],chip_num+1,q))
+# 		p3 = Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+2],im_data[0][chip_num+2],chip_num+2,q))
+# 		print "p1.start()"
+# 		p1.start()
+# 		print "p1 finished"
+# 		print "p2.start()"
+# 		p2.start()
+# 		print "p2 finished"
+# 		print "p3.start()"
+# 		p3.start()
+# 		print "p3 finished"
+# 		print "q1.get()"
+# 		results[chip_num] = q.get()#result1 = q.get()
+# 		im_data[0][chip_num] = results[chip_num][0] #result1[0]
+# 		med_back_data[0][chip_num] = results[chip_num][1] #result1[1]
+# 		print "q2.get()"
+# 		results[chip_num+1] = q.get()#result1 = q.get()
+# 		im_data[0][chip_num+1] = results[chip_num+1][0] #result1[0]
+# 		med_back_data[0][chip_num+1] = results[chip_num+1][1] #result1[1]
+# 		print "q3.get()"
+# 		results[chip_num+2] = q.get()#result1 = q.get()
+# 		im_data[0][chip_num+2] = results[chip_num+2][0] #result1[0]
+# 		med_back_data[0][chip_num+2] = results[chip_num+2][1] #result1[1]
+# 		print "q finished"
 
-print datetime.now(), start_time
-print "Done in %5.2f minutes." % ((datetime.now() - start_time)/60.)
+	procs = []
+	for chip_num in range(4):
+		print "Processing Chip #%i" % (chip_num+1)
+		procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num],im_data[0][chip_num],chip_num,q)))
+		print "Proc %i start" % (chip_num+1)
+		procs[chip_num].start()
+		time.sleep(3.0)
+# 	for ii in range(len(procs)):
+# 		print "Proc %i start" % (ii+1)
+# 		procs[ii].start()
+	for chip_num in range(4):
+		print "Queue %i start" % (chip_num+1)
+		results[chip_num] = q.get()#result1 = q.get()
+		im_data[0][chip_num] = results[chip_num][0] #result1[0]
+		med_back_data[0][chip_num] = results[chip_num][1] #result1[1]
+
+print "Chip #1 after subtraction:"
+print med_back_data[0][0][0][0]
+print im_data[0][0][0][0]
+print "Chip #2 after subtraction:"
+print med_back_data[0][1][0][0]
+print im_data[0][1][0][0]
+print "Chip #3 after subtraction:"
+print med_back_data[0][2][0][0]
+print im_data[0][2][0][0]
+print "Chip #4 after subtraction:"
+print med_back_data[0][3][0][0]
+print im_data[0][3][0][0]
+
+print "Done in %5.2f seconds." % (time.time() - start_time)
 
 ###########################################################################
 ####Fit a spline to the surface of each chip, for each background image####
