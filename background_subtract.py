@@ -11,6 +11,11 @@ def load_im(image,array):
 	hdulist.close()
 	return array
 
+def weight_im(weight_image,image):
+	for chip_num in range(im_nchip):
+		image[0][chip_num] = image[0][chip_num]*weight_image[0][chip_num]/np.max(weight_image[0][chip_num])
+	return image
+
 def find_nearest(array,nvals,val):
 	sorted = np.sort(np.abs(array))
 	keep_vals = sorted[0:nvals]
@@ -36,6 +41,14 @@ def median_subtract(back_cube,med_data,image,chip_num,q):
 	print "returning data"
 	q.put([image, med_data])
 
+def median_global_subtract(back_cube,med_data,image,chip_num,q):
+	print "median_global_subtract"
+	med_data[:][:] = np.median([back_cube[kk][chip_num] for kk in range(len(back_cube))])
+	print "subtracting background"
+	image = image-med_data
+	print "returning data"
+	q.put([image, med_data])
+
 import pyfits
 import numpy as np
 import glob
@@ -54,14 +67,15 @@ if len(sys.argv) < 2 :
 	print "ERROR - missing subtraction method"
 	exit()
 if sys.argv[1] != "median":
-	print "ERROR - background subtraction method must be one of [median]"
-	exit()
+	if sys.argv[1] != "median global":
+		print "ERROR - background subtraction method must be one of [median, median global]"
+		exit()
 
 im_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
 do_tile = '1'
 do_dither = '1'
 do_filt = 'i'
-n_backs = 6
+n_backs = 7
 
 #back_dir = '/Volumes/MyPassport/masks/'
 #mask_dir = '/Volumes/MyPassport/masks/'
@@ -89,9 +103,16 @@ for hdu in hdulist:
 hdulist.close()
 
 im_data = np.zeros((1,im_nchip,im_size[0],im_size[1]))
-#print im_data
+#w_im_data = np.zeros((1,im_nchip,im_size[0],im_size[1]))
 im_data = load_im(test_image,im_data)
-#weight_data = im_data
+#w_im_data =load_im(test_weight,w_im_data)
+
+#Weight scale the original image
+# im_data = weight_im(w_im_data,im_data)
+
+#del w_im_data
+
+# print np.max(im_data[0][0])
 
 ####################################################################
 ####Open background and mask files and scale them by weight maps####
@@ -153,7 +174,7 @@ for ii in range(n_backs):
 	hdulist = pyfits.open(back_ims[ii])
 	back_mjds.append(float(hdulist[0].header['MJD-OBS']))
 
-#Load background images and masks
+#Load background images and weight maps
 back_im_cube = np.zeros( (len(back_ims), im_nchip, im_size[0], im_size[1]) )
 for ii in range(len(back_ims)):
 	print "\nLoading background image %i/%i into data cube..." % (ii+1,len(back_ims))
@@ -163,62 +184,120 @@ for ii in range(len(back_ims)):
 #print back_im_cube
 #print len(back_im_cube), len(back_im_cube[0]), len(back_im_cube[0][0]), len(back_im_cube[0][0][0])
 
-mask_im_cube = np.zeros( (len(mask_ims), im_nchip, im_size[0], im_size[1]) )
-for ii in range(len(mask_ims)):
-	print "\nLoading mask image %i/%i into data cube..." % (ii+1,len(mask_ims))
-	mask_im_temp = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
-	mask_im_cube[ii] = load_im(mask_ims[ii],mask_im_temp)
+#back_w_cube = np.zeros( (len(back_weights), im_nchip, im_size[0], im_size[1]) )
 
-#Mask background images
-#print np.median(back_im_cube[0][0])
+#Weight scale the backgroundi mages
+# for ii in range(len(back_ims)):
+# 	print "\nWeighting background image %i/%i..." % (ii+1,len(back_weights))
+# 	back_weight_temp = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+# 	back_w_data = load_im(back_weights[ii],back_weight_temp)
+# 	back_im_cube[ii] = weight_im(back_w_data[0],back_im_cube[ii])
+# 
+# del back_w_data
 
+#Load mask images and mask the background images
 for ii in range(len(mask_ims)):
 	print "\nMasking background image %i/%i..." % (ii+1,len(mask_ims))
+	mask_im_temp = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+	mask_im_data = load_im(mask_ims[ii],mask_im_temp)
+
 	for jj in range(len(back_im_cube[0])):
-		#print "Median of Chip #%i before masking: %7.3f" % (jj+1, np.median(back_im_cube[ii][jj]))
-		bv_mask = (mask_im_cube[ii][jj] == 1.)
+		bv_mask = (mask_im_data[0][jj] == 1.)
 		back_im_cube[ii][jj][bv_mask] = np.nan
-		#print "Median of Chip #%i after masking: %7.3f" % (jj+1, np.median(back_im_cube[ii][jj]))
+	
+del mask_im_data
 
 ########################################################################
 ####Calculate the background level from all of the background images####
 ########################################################################
 
 # for ii in range(10):
-# 	print "Chip #%i before subtraction:" % (ii+1)
-# 	print back_im_cube[0][ii][0][0], back_im_cube[1][ii][0][0], back_im_cube[2][ii][0][0]
-# 	print np.median([back_im_cube[0][ii][0][0], back_im_cube[1][ii][0][0], back_im_cube[2][ii][0][0]])
-# 	print im_data[0][ii][0][0]
+#  	print "Chip #%i before subtraction:" % (ii+1)
+# # 	print back_im_cube[0][ii][0][0], back_im_cube[1][ii][0][0], back_im_cube[2][ii][0][0]
+# # 	print np.median([back_im_cube[0][ii][0][0], back_im_cube[1][ii][0][0], back_im_cube[2][ii][0][0]])
+#  	print np.median([back_im_cube[kk][ii][:][:] for kk in range(len(back_im_cube))])
+#  	print im_data[0][ii][0][0]
+
+q = Queue()
+results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
+med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+
+n_procs_max = 10
+chip_start = 0
+max_chips = 60
+procs = []
+
+while chip_start < max_chips:#im_nchips:
+	for chip_num in range(n_procs_max):
+  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
+	  if sys.argv[1] == "median":
+		  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
+	  if sys.argv[1] == "median global":
+  		  procs.append(Process(target=median_global_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
+	  print "Proc %i start" % (chip_num+1+chip_start)
+	  procs[chip_num+chip_start].start()
+	  time.sleep(3.0)
+	for chip_num in range(n_procs_max):
+	  print "Queue %i start" % (chip_num+1+chip_start)
+	  results[chip_num+chip_start] = q.get()#result1 = q.get()
+	  im_data[0][chip_num+chip_start] = results[chip_num+chip_start][0] #result1[0]
+	  med_back_data[0][chip_num+chip_start] = results[chip_num+chip_start][1] #result1[1]
+	chip_start+=n_procs_max
 
 #Median background subtraction
-if sys.argv[1] == 'median':
-	q = Queue()
-	results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
-	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
-
-	n_procs_max = 10
-	chip_start = 0
-	max_chips = 60
-	proc = []
-	while chip_start < max_chips:#im_nchips:
-#		procs = []
-		for chip_num in range(n_procs_max):
-	  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
- 		  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
- 		  print "Proc %i start" % (chip_num+1+chip_start)
- 		  procs[chip_num+chip_start].start()
- 		  time.sleep(3.0)
- 		for chip_num in range(n_procs_max):
- 		  print "Queue %i start" % (chip_num+1+chip_start)
- 		  results[chip_num+chip_start] = q.get()#result1 = q.get()
- 		  im_data[0][chip_num+chip_start] = results[chip_num+chip_start][0] #result1[0]
- 		  med_back_data[0][chip_num+chip_start] = results[chip_num+chip_start][1] #result1[1]
-		chip_start+=n_procs_max
+# if sys.argv[1] == 'median':
+# 	q = Queue()
+# 	results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
+# 	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+# 
+# 	n_procs_max = 10
+# 	chip_start = 0
+# 	max_chips = 10
+# 	procs = []
+# 	while chip_start < max_chips:#im_nchips:
+# #		procs = []
+# 		for chip_num in range(n_procs_max):
+# 	  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
+#  		  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
+#  		  print "Proc %i start" % (chip_num+1+chip_start)
+#  		  procs[chip_num+chip_start].start()
+#  		  time.sleep(3.0)
+#  		for chip_num in range(n_procs_max):
+#  		  print "Queue %i start" % (chip_num+1+chip_start)
+#  		  results[chip_num+chip_start] = q.get()#result1 = q.get()
+#  		  im_data[0][chip_num+chip_start] = results[chip_num+chip_start][0] #result1[0]
+#  		  med_back_data[0][chip_num+chip_start] = results[chip_num+chip_start][1] #result1[1]
+# 		chip_start+=n_procs_max
+# 
+# #Global median subtraction
+# if sys.argv[1] == 'median global':
+# 	q = Queue()
+# 	results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
+# 	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+# 	
+# 	n_procs_max = 10
+# 	chip_start = 0
+# 	max_chips = 10
+# 	procs = []
+# 	while chip_start < max_chips:#im_nchips:
+# #		procs = []
+# 		for chip_num in range(n_procs_max):
+# 	  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
+#  		  procs.append(Process(target=median_global_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
+#  		  print "Proc %i start" % (chip_num+1+chip_start)
+#  		  procs[chip_num+chip_start].start()
+#  		  time.sleep(3.0)
+#  		for chip_num in range(n_procs_max):
+#  		  print "Queue %i start" % (chip_num+1+chip_start)
+#  		  results[chip_num+chip_start] = q.get()#result1 = q.get()
+#  		  im_data[0][chip_num+chip_start] = results[chip_num+chip_start][0] #result1[0]
+#  		  med_back_data[0][chip_num+chip_start] = results[chip_num+chip_start][1] #result1[1]
+# 		chip_start+=n_procs_max
 
 # for ii in range(10):
-# 	print "Chip #%i after subtraction:" % (ii+1)
-# 	print med_back_data[0][ii][0][0]
-# 	print im_data[0][ii][0][0]
+#  	print "Chip #%i after subtraction:" % (ii+1)
+#  	print med_back_data[0][ii][0][0]
+#  	print im_data[0][ii][0][0]
 
 hdulist = pyfits.open(test_image)
 
