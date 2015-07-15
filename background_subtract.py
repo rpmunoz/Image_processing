@@ -199,8 +199,9 @@ if sys.argv[1] == 'median':
 	n_procs_max = 10
 	chip_start = 0
 	max_chips = 60
+	proc = []
 	while chip_start < max_chips:#im_nchips:
-		procs = []
+#		procs = []
 		for chip_num in range(n_procs_max):
 	  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
  		  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
