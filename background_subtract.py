@@ -197,22 +197,22 @@ if sys.argv[1] == 'median':
 	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
 
 	n_procs_max = 10
-	chip_num = 0
+	chip_start = 0
 	max_chips = 60
-	while chip_num < max_chips:#im_nchips:
+	while chip_start < max_chips:#im_nchips:
 		procs = []
 		for chip_num in range(n_procs_max):
-	  	  print "Processing Chip #%i" % (chip_num+1)
-		  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num],im_data[0][chip_num],chip_num,q)))
-		  print "Proc %i start" % (chip_num+1)
-		  procs[chip_num].start()
-		  time.sleep(3.0)
-		for chip_num in range(n_procs_max):
-		  print "Queue %i start" % (chip_num+1)
-		  results[chip_num] = q.get()#result1 = q.get()
-		  im_data[0][chip_num] = results[chip_num][0] #result1[0]
-		  med_back_data[0][chip_num] = results[chip_num][1] #result1[1]
-		chip_num+=n_procs_max
+	  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
+ 		  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
+ 		  print "Proc %i start" % (chip_num+1+chip_start)
+ 		  procs[chip_num+chip_start].start()
+ 		  time.sleep(3.0)
+ 		for chip_num in range(n_procs_max):
+ 		  print "Queue %i start" % (chip_num+1+chip_start)
+ 		  results[chip_num+chip_start] = q.get()#result1 = q.get()
+ 		  im_data[0][chip_num+chip_start] = results[chip_num+chip_start][0] #result1[0]
+ 		  med_back_data[0][chip_num+chip_start] = results[chip_num+chip_start][1] #result1[1]
+		chip_start+=n_procs_max
 
 # for ii in range(10):
 # 	print "Chip #%i after subtraction:" % (ii+1)
