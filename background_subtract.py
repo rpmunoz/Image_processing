@@ -21,18 +21,20 @@ def find_nearest(array,nvals,val):
 	return inds
 
 def median_subtract(back_cube,med_data,image,chip_num,q):
-	#print "Processing Chip #%i..." % (chip+1)
-	#med_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
 	print "median_subtract"
 	for ii in range(im_size[0]):
-	  for jj in range(im_size[1]):
-		med_data[ii][jj] = np.median([back_cube[kk][chip_num][ii][jj] for kk in range(len(back_cube))])
+		for jj in range(im_size[1]):
+			back_val = np.median([back_cube[kk][chip_num][ii][jj] for kk in range(len(back_cube))])
+			if np.isnan(back_val) == False:
+				back_val_safe = back_val
+				med_data[ii][jj] = back_val
+			else:
+				med_data[ii][jj] = back_val_safe
 
 	print "subtracting background"
 	image = image-med_data
 	print "returning data"
 	q.put([image, med_data])
-
 
 import pyfits
 import numpy as np
@@ -59,7 +61,7 @@ im_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt
 do_tile = '1'
 do_dither = '1'
 do_filt = 'i'
-n_backs = 3
+n_backs = 6
 
 #back_dir = '/Volumes/MyPassport/masks/'
 #mask_dir = '/Volumes/MyPassport/masks/'
@@ -71,9 +73,10 @@ test_weight = im_dir+'survey_t'+do_tile+'_d'+do_dither+'_'+do_filt+'_short.WEIGH
 
 im_h = pyfits.open(test_image)[0].header
 
-#Open image file, and scale it by the weight map SHOULD THE IMAGE BE SCALED????
+#Open image file, and scale it by the weight map. ???SHOULD THE IMAGE BE SCALED????
 print "\nLoading image..."
 hdulist = pyfits.open(test_image)
+
 im_nchip=0
 for hdu in hdulist:
 	if hdu.header['NAXIS'] != 0:
@@ -88,19 +91,7 @@ hdulist.close()
 im_data = np.zeros((1,im_nchip,im_size[0],im_size[1]))
 #print im_data
 im_data = load_im(test_image,im_data)
-#print im_data
 #weight_data = im_data
-
-# x = np.arange(0,4094,1)
-# y = np.arange(0,2046,1)
-# x, y = np.meshgrid(x,y)
-# 
-# fig = plt.figure()
-# ax = fig.gca(projection='3d')
-# 
-# ax.plot_surface(x,y,im_data[0][0])
-# plt.show()
-# exit()
 
 ####################################################################
 ####Open background and mask files and scale them by weight maps####
@@ -152,6 +143,7 @@ mask_ims = np.array(mask_ims)
 # print back_ims
 # print back_weights
 # print mask_ims
+# exit()
 
 print "\nUsing the following frames for the background subtraction: " 
 print back_ims
@@ -192,22 +184,11 @@ for ii in range(len(mask_ims)):
 ####Calculate the background level from all of the background images####
 ########################################################################
 
-print "Chip #1 before subtraction:"
-print back_im_cube[0][0][0][0], back_im_cube[1][0][0][0], back_im_cube[2][0][0][0]
-print np.median([back_im_cube[0][0][0][0], back_im_cube[1][0][0][0], back_im_cube[2][0][0][0]])
-print im_data[0][0][0][0]
-print "Chip #2 before subtraction:"
-print back_im_cube[0][1][0][0], back_im_cube[1][1][0][0], back_im_cube[2][1][0][0]
-print np.median([back_im_cube[0][1][0][0], back_im_cube[1][1][0][0], back_im_cube[2][1][0][0]])
-print im_data[0][1][0][0]
-print "Chip #3 before subtraction:"
-print back_im_cube[0][2][0][0], back_im_cube[1][2][0][0], back_im_cube[2][2][0][0]
-print np.median([back_im_cube[0][2][0][0], back_im_cube[1][2][0][0], back_im_cube[2][2][0][0]])
-print im_data[0][2][0][0]
-print "Chip #4 before subtraction:"
-print back_im_cube[0][3][0][0], back_im_cube[1][3][0][0], back_im_cube[2][3][0][0]
-print np.median([back_im_cube[0][3][0][0], back_im_cube[1][3][0][0], back_im_cube[2][3][0][0]])
-print im_data[0][3][0][0]
+# for ii in range(10):
+# 	print "Chip #%i before subtraction:" % (ii+1)
+# 	print back_im_cube[0][ii][0][0], back_im_cube[1][ii][0][0], back_im_cube[2][ii][0][0]
+# 	print np.median([back_im_cube[0][ii][0][0], back_im_cube[1][ii][0][0], back_im_cube[2][ii][0][0]])
+# 	print im_data[0][ii][0][0]
 
 #Median background subtraction
 if sys.argv[1] == 'median':
@@ -215,67 +196,47 @@ if sys.argv[1] == 'median':
 	results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
 	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
 
-# 	for chip_num in range(1):#range(im_nchip):
-# 		med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
-# 		print "Processing Chip #%i" % (chip_num+1)
-# 		p1 = Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num],im_data[0][chip_num],chip_num,q))		
-# 		p2 = Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+1],im_data[0][chip_num+1],chip_num+1,q))
-# 		p3 = Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+2],im_data[0][chip_num+2],chip_num+2,q))
-# 		print "p1.start()"
-# 		p1.start()
-# 		print "p1 finished"
-# 		print "p2.start()"
-# 		p2.start()
-# 		print "p2 finished"
-# 		print "p3.start()"
-# 		p3.start()
-# 		print "p3 finished"
-# 		print "q1.get()"
-# 		results[chip_num] = q.get()#result1 = q.get()
-# 		im_data[0][chip_num] = results[chip_num][0] #result1[0]
-# 		med_back_data[0][chip_num] = results[chip_num][1] #result1[1]
-# 		print "q2.get()"
-# 		results[chip_num+1] = q.get()#result1 = q.get()
-# 		im_data[0][chip_num+1] = results[chip_num+1][0] #result1[0]
-# 		med_back_data[0][chip_num+1] = results[chip_num+1][1] #result1[1]
-# 		print "q3.get()"
-# 		results[chip_num+2] = q.get()#result1 = q.get()
-# 		im_data[0][chip_num+2] = results[chip_num+2][0] #result1[0]
-# 		med_back_data[0][chip_num+2] = results[chip_num+2][1] #result1[1]
-# 		print "q finished"
+	n_procs_max = 10
+	chip_num = 0
+	max_chips = 60
+	while chip_num < max_chips:#im_nchips:
+		procs = []
+		for chip_num in range(n_procs_max):
+	  	  print "Processing Chip #%i" % (chip_num+1)
+		  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num],im_data[0][chip_num],chip_num,q)))
+		  print "Proc %i start" % (chip_num+1)
+		  procs[chip_num].start()
+		  time.sleep(3.0)
+		for chip_num in range(n_procs_max):
+		  print "Queue %i start" % (chip_num+1)
+		  results[chip_num] = q.get()#result1 = q.get()
+		  im_data[0][chip_num] = results[chip_num][0] #result1[0]
+		  med_back_data[0][chip_num] = results[chip_num][1] #result1[1]
+		chip_num+=n_procs_max
 
-	procs = []
-	for chip_num in range(4):
-		print "Processing Chip #%i" % (chip_num+1)
-		procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num],im_data[0][chip_num],chip_num,q)))
-		print "Proc %i start" % (chip_num+1)
-		procs[chip_num].start()
-		time.sleep(3.0)
-# 	for ii in range(len(procs)):
-# 		print "Proc %i start" % (ii+1)
-# 		procs[ii].start()
-	for chip_num in range(4):
-		print "Queue %i start" % (chip_num+1)
-		results[chip_num] = q.get()#result1 = q.get()
-		im_data[0][chip_num] = results[chip_num][0] #result1[0]
-		med_back_data[0][chip_num] = results[chip_num][1] #result1[1]
+# for ii in range(10):
+# 	print "Chip #%i after subtraction:" % (ii+1)
+# 	print med_back_data[0][ii][0][0]
+# 	print im_data[0][ii][0][0]
 
-print "Chip #1 after subtraction:"
-print med_back_data[0][0][0][0]
-print im_data[0][0][0][0]
-print "Chip #2 after subtraction:"
-print med_back_data[0][1][0][0]
-print im_data[0][1][0][0]
-print "Chip #3 after subtraction:"
-print med_back_data[0][2][0][0]
-print im_data[0][2][0][0]
-print "Chip #4 after subtraction:"
-print med_back_data[0][3][0][0]
-print im_data[0][3][0][0]
+hdulist = pyfits.open(test_image)
+
+print "Saving image data..."
+hdulist_out = hdulist
+for ii in range(im_nchip):
+	hdulist_out[ii+1].data = im_data[0][ii]
+hdulist_out.writeto('/Users/matt/Desktop/deleteme_image.fits',clobber=True)
+hdulist_out.close()
+
+print "Saving background data..."
+hdulist_back_out = hdulist
+for ii in range(im_nchip):
+	hdulist_back_out[ii+1].data = med_back_data[0][ii]
+hdulist_back_out.writeto('/Users/matt/Desktop/deleteme_back.fits',clobber=True)
+hdulist_back_out.close()
 
 print "Done in %5.2f seconds." % (time.time() - start_time)
 
-###########################################################################
-####Fit a spline to the surface of each chip, for each background image####
-###########################################################################
+#Spline surface background subtraction
+#Fit a spline to the surface of each chip, for each background image
 
