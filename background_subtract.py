@@ -272,7 +272,7 @@ max_chips = 60
 procs = []
 
 while chip_start < max_chips:#im_nchips:
-	print "Processing Chip #%i-%i..." % (chip_start+1, chip_start+1+n_procs_max)
+	print "Processing Chip #%i-%i..." % (chip_start+1, chip_start+n_procs_max)
 	for chip_num in range(n_procs_max):
 #  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
 	  if sys.argv[1] == "median":
