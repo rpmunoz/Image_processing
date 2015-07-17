@@ -26,7 +26,6 @@ def find_nearest(array,nvals,val):
 	return inds
 
 def median_subtract(back_cube,med_data,image,chip_num,q):
-	print "median_subtract"
 	for ii in range(im_size[0]):
 		for jj in range(im_size[1]):
 			back_val = np.median([back_cube[kk][chip_num][ii][jj] for kk in range(len(back_cube))])
@@ -36,17 +35,12 @@ def median_subtract(back_cube,med_data,image,chip_num,q):
 			else:
 				med_data[ii][jj] = back_val_safe
 
-	print "subtracting background"
 	image = image-med_data
-	print "returning data"
 	q.put([image, med_data])
 
 def median_global_subtract(back_cube,med_data,image,chip_num,q):
-	print "median_global_subtract"
 	med_data[:][:] = np.median([back_cube[kk][chip_num] for kk in range(len(back_cube))])
-	print "subtracting background"
 	image = image-med_data
-	print "returning data"
 	q.put([image, med_data])
 
 import pyfits
@@ -58,7 +52,7 @@ import matplotlib.pyplot as plt
 # from scipy import ndimage
 # from mpl_toolkits.mplot3d import Axes3D
 # from matplotlib import cm
-import sys
+import os,sys,subprocess
 import time
 
 start_time = time.time()
@@ -71,16 +65,29 @@ if sys.argv[1] != "median":
 		print "ERROR - background subtraction method must be one of [median, median global]"
 		exit()
 
-im_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
-do_tile = '1'
-do_dither = '1'
-do_filt = 'i'
-n_backs = 7
+# im_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+# im_dir = '/Volumes/Q6/matt/2014A-0610/pipeline/images/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+# do_tile = '3'
+# do_dither = '3'
+# do_filt = 'i'
+# n_backs = 7
+
+im_dir = sys.argv[2]
+do_tile = sys.argv[3]
+do_dither = sys.argv[4]
+do_filt = sys.argv[5]
+n_backs = int(sys.argv[6])
+ss_im_out = sys.argv[7]
+sky_im_out = sys.argv[8]
 
 #back_dir = '/Volumes/MyPassport/masks/'
 #mask_dir = '/Volumes/MyPassport/masks/'
-back_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
-mask_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+#back_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+#mask_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+#back_dir = '/Volumes/Q6/matt/2014A-0610/pipeline/images/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+#mask_dir = '/Volumes/Q6/matt/2014A-0610/pipeline/images/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+back_dir = im_dir
+mask_dir = im_dir
 
 test_image = im_dir+'survey_t'+do_tile+'_d'+do_dither+'_'+do_filt+'_short.fits'
 test_weight = im_dir+'survey_t'+do_tile+'_d'+do_dither+'_'+do_filt+'_short.WEIGHT.fits'
@@ -88,6 +95,7 @@ test_weight = im_dir+'survey_t'+do_tile+'_d'+do_dither+'_'+do_filt+'_short.WEIGH
 im_h = pyfits.open(test_image)[0].header
 
 #Open image file, and scale it by the weight map. ???SHOULD THE IMAGE BE SCALED????
+print "\nProcessing image %s for background subtraction..." % test_image
 print "\nLoading image..."
 hdulist = pyfits.open(test_image)
 
@@ -119,10 +127,21 @@ im_data = load_im(test_image,im_data)
 ####################################################################
 
 #Determine the background files closest in time to the image
-temp_back_ims = glob.glob(back_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.fits')
-temp_back_weights = glob.glob(back_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.WEIGHT.fits')
-
-temp_mask_ims = glob.glob(mask_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.MASK.fits')
+# temp_back_ims = glob.glob(back_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.fits')
+# temp_back_weights = glob.glob(back_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.WEIGHT.fits')
+# temp_mask_ims = glob.glob(mask_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.MASK.fits')
+if do_dither == '1':
+	temp_back_ims = np.concatenate((glob.glob(back_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.fits'),glob.glob(back_dir+'survey_t*_*d'+str(int(do_dither)+1)+'_*'+do_filt+'_*short.fits')))
+	temp_back_weights = np.concatenate((glob.glob(back_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.WEIGHT.fits'),glob.glob(back_dir+'survey_t*_*d'+str(int(do_dither)+1)+'_*'+do_filt+'_*short.WEIGHT.fits')))
+	temp_mask_ims = np.concatenate((glob.glob(mask_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.MASK.fits'),glob.glob(mask_dir+'survey_t*_*d'+str(int(do_dither)+1)+'_*'+do_filt+'_*short.MASK.fits')))
+if do_dither != '1' and int(do_dither) <= 5:
+	temp_back_ims = np.concatenate((glob.glob(back_dir+'survey_t*_*d'+str(int(do_dither)-1)+'_*'+do_filt+'_*short.fits'),glob.glob(back_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.fits'),glob.glob(back_dir+'survey_t*_*d'+str(int(do_dither)+1)+'_*'+do_filt+'_*short.fits')))
+	temp_back_weights = np.concatenate((glob.glob(back_dir+'survey_t*_*d'+str(int(do_dither)-1)+'_*'+do_filt+'_*short.WEIGHT.fits'),glob.glob(back_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.WEIGHT.fits'),glob.glob(back_dir+'survey_t*_*d'+str(int(do_dither)+1)+'_*'+do_filt+'_*short.WEIGHT.fits')))
+	temp_mask_ims = np.concatenate((glob.glob(mask_dir+'survey_t*_*d'+str(int(do_dither)-1)+'_*'+do_filt+'_*short.MASK.fits'),glob.glob(mask_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*short.MASK.fits'),glob.glob(mask_dir+'survey_t*_*d'+str(int(do_dither)+1)+'_*'+do_filt+'_*short.MASK.fits')))
+if int(do_dither) > 5:
+	temp_back_ims = glob.glob(back_dir+'survey_t*_*d*_*'+do_filt+'_*short.fits')
+	temp_back_weights = glob.glob(back_dir+'survey_t*_*d*_*'+do_filt+'_*short.WEIGHT.fits')
+	temp_mask_ims = glob.glob(mask_dir+'survey_t*_*d*_*'+do_filt+'_*short.MASK.fits')
 
 # print temp_back_ims
 # print temp_back_weights
@@ -131,17 +150,42 @@ temp_mask_ims = glob.glob(mask_dir+'survey_t*_*d'+do_dither+'_*'+do_filt+'_*shor
 im_mjd = im_h['MJD-OBS']
 print "\nImage observation date = %f" % im_mjd
 
-temp_back_ims = np.delete(temp_back_ims, list(temp_back_ims).index(back_dir+'survey_t1_'+'d'+do_dither+'_'+do_filt+'_short.fits'),0)
-temp_back_weights = np.delete(temp_back_weights, list(temp_back_weights).index(back_dir+'survey_t1_'+'d'+do_dither+'_'+do_filt+'_short.WEIGHT.fits'), 0)
-temp_mask_ims = np.delete(temp_mask_ims, list(temp_mask_ims).index(back_dir+'survey_t1_'+'d'+do_dither+'_'+do_filt+'_short.MASK.fits'), 0)
+#Delete tiles with bright, extended objects in them
+#SCABS: tile1 (CenA), tile11 (wCen), tile24(wCen)
+if do_dither == '1':
+	gv_dithers = [do_dither,str(int(do_dither)+1)]
+if do_dither != '1' and int(do_dither) <= 5:
+	gv_dithers = [str(int(do_dither)-1),do_dither,str(int(do_dither)+1)]
+if int(do_dither) > 5:
+	gv_dithers = [str(ii+1) for ii in range(15)]
+	
+#print gv_dithers
+bv_tiles = ['1','11','24']
+for gv_d in gv_dithers:
+	for bv in bv_tiles:
+		if back_dir+'survey_t'+bv+'_d'+gv_d+'_'+do_filt+'_short.fits' in temp_back_ims:
+			temp_back_ims = np.delete(temp_back_ims, list(temp_back_ims).index(back_dir+'survey_t'+bv+'_d'+gv_d+'_'+do_filt+'_short.fits'),0)
+			temp_back_weights = np.delete(temp_back_weights, list(temp_back_weights).index(back_dir+'survey_t'+bv+'_d'+gv_d+'_'+do_filt+'_short.WEIGHT.fits'), 0)
+			temp_mask_ims = np.delete(temp_mask_ims, list(temp_mask_ims).index(back_dir+'survey_t'+bv+'_d'+gv_d+'_'+do_filt+'_short.MASK.fits'), 0)
 
+for imfile in temp_back_ims:
+	if imfile.replace('short.fits','short.MASK.fits') not in temp_mask_ims:
+		temp_back_ims = np.delete(temp_back_ims, list(temp_back_ims).index(imfile), 0)		
+for wfile in temp_back_weights:
+	if wfile.replace('short.WEIGHT.fits','short.MASK.fits') not in temp_mask_ims:
+		temp_back_weights = np.delete(temp_back_weights, list(temp_back_weights).index(wfile), 0)		
+		
+# print len(temp_back_ims), len(temp_back_weights), len(temp_mask_ims)
+# print temp_back_ims
+# print temp_back_weights
+# print temp_mask_ims
+#exit()
 # print temp_back_ims
 # print temp_back_weights
 
 back_mjds = []
 for ii in range(len(temp_back_ims)):
-	hdulist = pyfits.open(temp_back_ims[ii])
-	back_mjds.append(float(hdulist[0].header['MJD-OBS']))
+	back_mjds.append(float(subprocess.Popen("dfits "+temp_back_ims[ii]+" | fitsort MJD-OBS | awk 'NR>1 {print $2}'", shell=True, stdout=subprocess.PIPE).stdout.read().replace('\n','')))
 back_mjds = np.array(back_mjds)
 
 time_diffs = back_mjds - im_mjd
@@ -151,6 +195,8 @@ time_diffs = back_mjds - im_mjd
 back_ims = []
 back_weights = []
 mask_ims = []
+
+# print len(temp_back_ims), len(temp_back_weights), len(temp_mask_ims)
 
 for idx in find_nearest(time_diffs,n_backs,0):
 	back_ims.append(temp_back_ims[idx])
@@ -164,15 +210,13 @@ mask_ims = np.array(mask_ims)
 # print back_ims
 # print back_weights
 # print mask_ims
-# exit()
 
 print "\nUsing the following frames for the background subtraction: " 
 print back_ims
 
 back_mjds = []
 for ii in range(n_backs):
-	hdulist = pyfits.open(back_ims[ii])
-	back_mjds.append(float(hdulist[0].header['MJD-OBS']))
+	back_mjds.append(float(subprocess.Popen("dfits "+temp_back_ims[ii]+" | fitsort MJD-OBS | awk 'NR>1 {print $2}'", shell=True, stdout=subprocess.PIPE).stdout.read().replace('\n','')))
 
 #Load background images and weight maps
 back_im_cube = np.zeros( (len(back_ims), im_nchip, im_size[0], im_size[1]) )
@@ -234,85 +278,33 @@ while chip_start < max_chips:#im_nchips:
 		  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
 	  if sys.argv[1] == "median global":
   		  procs.append(Process(target=median_global_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
-	  print "Proc %i start" % (chip_num+1+chip_start)
+	  #print "Proc %i start" % (chip_num+1+chip_start)
 	  procs[chip_num+chip_start].start()
 	  time.sleep(3.0)
 	for chip_num in range(n_procs_max):
-	  print "Queue %i start" % (chip_num+1+chip_start)
+	  #print "Queue %i start" % (chip_num+1+chip_start)
 	  results[chip_num+chip_start] = q.get()#result1 = q.get()
 	  im_data[0][chip_num+chip_start] = results[chip_num+chip_start][0] #result1[0]
 	  med_back_data[0][chip_num+chip_start] = results[chip_num+chip_start][1] #result1[1]
 	chip_start+=n_procs_max
 
-#Median background subtraction
-# if sys.argv[1] == 'median':
-# 	q = Queue()
-# 	results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
-# 	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
-# 
-# 	n_procs_max = 10
-# 	chip_start = 0
-# 	max_chips = 10
-# 	procs = []
-# 	while chip_start < max_chips:#im_nchips:
-# #		procs = []
-# 		for chip_num in range(n_procs_max):
-# 	  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
-#  		  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
-#  		  print "Proc %i start" % (chip_num+1+chip_start)
-#  		  procs[chip_num+chip_start].start()
-#  		  time.sleep(3.0)
-#  		for chip_num in range(n_procs_max):
-#  		  print "Queue %i start" % (chip_num+1+chip_start)
-#  		  results[chip_num+chip_start] = q.get()#result1 = q.get()
-#  		  im_data[0][chip_num+chip_start] = results[chip_num+chip_start][0] #result1[0]
-#  		  med_back_data[0][chip_num+chip_start] = results[chip_num+chip_start][1] #result1[1]
-# 		chip_start+=n_procs_max
-# 
-# #Global median subtraction
-# if sys.argv[1] == 'median global':
-# 	q = Queue()
-# 	results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
-# 	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
-# 	
-# 	n_procs_max = 10
-# 	chip_start = 0
-# 	max_chips = 10
-# 	procs = []
-# 	while chip_start < max_chips:#im_nchips:
-# #		procs = []
-# 		for chip_num in range(n_procs_max):
-# 	  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
-#  		  procs.append(Process(target=median_global_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
-#  		  print "Proc %i start" % (chip_num+1+chip_start)
-#  		  procs[chip_num+chip_start].start()
-#  		  time.sleep(3.0)
-#  		for chip_num in range(n_procs_max):
-#  		  print "Queue %i start" % (chip_num+1+chip_start)
-#  		  results[chip_num+chip_start] = q.get()#result1 = q.get()
-#  		  im_data[0][chip_num+chip_start] = results[chip_num+chip_start][0] #result1[0]
-#  		  med_back_data[0][chip_num+chip_start] = results[chip_num+chip_start][1] #result1[1]
-# 		chip_start+=n_procs_max
-
-# for ii in range(10):
-#  	print "Chip #%i after subtraction:" % (ii+1)
-#  	print med_back_data[0][ii][0][0]
-#  	print im_data[0][ii][0][0]
-
+#Save the background subtracted image and the background image
 hdulist = pyfits.open(test_image)
 
 print "Saving image data..."
 hdulist_out = hdulist
 for ii in range(im_nchip):
 	hdulist_out[ii+1].data = im_data[0][ii]
-hdulist_out.writeto('/Users/matt/Desktop/deleteme_image.fits',clobber=True)
+#hdulist_out.writeto('/Users/matt/Desktop/deleteme_image.fits',clobber=True)
+hdulist_out.writeto('%s' % ss_im_out,clobber=True)
 hdulist_out.close()
 
 print "Saving background data..."
 hdulist_back_out = hdulist
 for ii in range(im_nchip):
 	hdulist_back_out[ii+1].data = med_back_data[0][ii]
-hdulist_back_out.writeto('/Users/matt/Desktop/deleteme_back.fits',clobber=True)
+#hdulist_back_out.writeto('/Users/matt/Desktop/deleteme_back.fits',clobber=True)
+hdulist_back_out.writeto('%s' % sky_im_out,clobber=True)
 hdulist_back_out.close()
 
 print "Done in %5.2f seconds." % (time.time() - start_time)
