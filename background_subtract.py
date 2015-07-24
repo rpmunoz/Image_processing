@@ -49,23 +49,27 @@ def median_global_subtract(back_cube,med_data,image,chip_num,q):
 	image = image-med_data
 	q.put([image, med_data])
 	
-def tps_subtract(back_cube,tps_data,image,chip_num):
-	zz = np.zeros( (len(back_cube), im_size[0], im_size[1]) )
-	med_size = 320
+def tps_subtract(back_cube,image,chip_num):
+	back_time = time.time()
+	zz = np.zeros( (im_size[0], im_size[1]) )
+	med_size=320
 
-	nx, ny = 100, 100
+	z_chk = []
+	for ii in range(len(back_im_cube)):
+		z_chk.append([])
+
+	nx, ny = 10, 10
 	xx1, yy1 = np.meshgrid(np.arange(0, im_size[0], nx), 
-						 np.arange(0, im_size[1], ny))
+						 np.arange(im_size[1], 0, -1*ny))
 
 	xx2, yy2 = np.meshgrid(np.arange(0, im_size[0], 1), 
-						 np.arange(0, im_size[1], 1))
+						np.arange(im_size[1], 0, -1))	
 
-	for kk in range(len(back_cube)):
-		print "Background frame # %i/%i:" % (kk+1,len(back_cube))
+	cnt = 0
+	for kk in range(len(back_im_cube)):
 		xx = 0
 		x_chk = []
 		y_chk = []
-		z_chk = []
 		while xx < im_size[0]:
 			x_chk_size = med_size
 			if xx+x_chk_size > im_size[0]: x_chk_size = im_size[0]-xx
@@ -75,72 +79,67 @@ def tps_subtract(back_cube,tps_data,image,chip_num):
 				if yy+y_chk_size > im_size[1]: y_chk_size = im_size[1]-yy
 				x_chk.append(int(xx+x_chk_size/2))
 				y_chk.append(int(yy+y_chk_size/2))
-				z_chk.append(stats.nanmedian(back_cube[kk][chip_num][xx:xx+x_chk_size,yy:yy+y_chk_size],axis=None))
-#				z_chk.append(stats.nanmedian(back_cube[0][0][xx:xx+x_chk_size,yy:yy+y_chk_size],axis=None))
- 				if yy+y_chk_size < im_size[1]: 
- 					yy+=y_chk_size-5
-				else:
-					yy+=y_chk_size
- 			if xx+x_chk_size < im_size[0]:
- 				xx+=x_chk_size-5
- 			else:
-				xx+=x_chk_size
+				z_chk[cnt].append(stats.nanmedian(back_im_cube[kk][0][xx:xx+x_chk_size,yy:yy+y_chk_size],axis=None))
+				yy+=y_chk_size
+			xx+=x_chk_size
+		cnt+=1
 
-		x_chk = np.array(x_chk)
-		y_chk = np.array(y_chk)
-		z_chk = np.array(z_chk)
-		mask = np.where(np.isnan(z_chk) != True,1,0)
-		x_chk = np.compress(mask,x_chk)
-		y_chk = np.compress(mask,y_chk)
-		z_chk = np.compress(mask,z_chk)
-		mask = np.where(z_chk >= 0.0,1,0)
-		x_chk = np.compress(mask,x_chk)
-		y_chk = np.compress(mask,y_chk)
-		z_chk = np.compress(mask,z_chk)
+	x_chk = np.array(x_chk)
+	y_chk = np.array(y_chk)
+	z_chk = np.array(z_chk)
 
-# 		nx, ny = 100, 100
-# 		xx, yy = np.meshgrid(np.arange(0, im_size[0], nx), 
-# 							 np.arange(0, im_size[1], ny))
-#		print "Interpolating..."
-		tps = interpolate.Rbf(x_chk,y_chk,z_chk,function='thin_plate')#'thin_plate')
-		print "		Interpolation done..."
+	z_fit = []
+	for ii in range(len(z_chk[0])):#range(len(z_chk[0])):
+# 		print np.median([z_chk[jj][ii] for jj in range(len(z_chk))])
+		z_fit.append(np.median([z_chk[jj][ii] for jj in range(len(z_chk))]))
 
-		zz_i = tps(xx1,yy1)
+	z_fit = np.array(z_fit)
 
-		print "		Plotting..."
-		plt.figure()
-		plt.subplot(211)
-		plt.imshow(zz_i, extent=(0, im_size[0], 0, im_size[1]))
-		plt.colorbar()
-		plt.subplot(212)
-		plt.scatter(x_chk, y_chk, c=z_chk)
-		plt.colorbar()
-		plt.xlim(0,im_size[0])
-		plt.ylim(0,im_size[1])
-		plt.savefig('/Users/matt/Desktop/backs/chip%i_back%i_f%i_tps.pdf' % (chip_num+1,med_size,kk+1))
+# 	nx, ny = 10, 10
+# 	xx, yy = np.meshgrid(np.arange(0, im_size[0], nx), 
+# 						 np.arange(im_size[1], 0, ny))
 
-		print "		Filling dithers..."
-# 		xx, yy = np.meshgrid(np.arange(0, im_size[0], 1), 
-# 							 np.arange(0, im_size[1], 1))
-		zz[kk] = tps(xx2,yy2).T
-# 		for ii in range(im_size[0]):
-# 			for jj in range(im_size[1]):
-# 				zz[kk][ii][jj] = tps(ii,jj)
+	print "Interpolating..."
+	tps = interpolate.Rbf(x_chk,y_chk,z_fit,function='thin_plate')#'thin_plate')
+	print "Interpolation done..."
 
-	print "		Finding median..."
-	for ii in range(im_size[0]):
-		for jj in range(im_size[1]):
-			tps_data[ii][jj] = np.median([zz[kk][ii][jj] for kk in range(len(back_cube))])
+	zz_i = tps(xx1,yy1).T
+
+# 	xx, yy = np.meshgrid(np.arange(0, im_size[0], 1), 
+# 						 np.arange(im_size[1], 0, 1))
+
+#	print tps_data
+#  	for ii in range(im_size[0]):
+#  		for jj in range(im_size[1]):
+#  			zz[ii][jj] = tps(ii,jj).T
+	zz = tps(xx2,yy2).T
+
+	print "Plotting..."
+	plt.figure()
+	plt.subplot(211)
+ 	plt.imshow(zz_i, extent=(0, im_size[0], 0, im_size[1]))
+# 	plt.imshow(tps_data, extent=(0, im_size[0], 0, im_size[1]))
+	plt.colorbar()
+	plt.subplot(212)
+	plt.scatter(x_chk, y_chk, c=z_fit)
+	plt.colorbar()
+	plt.xlim(0,im_size[0])
+	plt.ylim(0,im_size[1])
+	plt.savefig('/Users/matt/Desktop/backs/chip%i_back%i_d%i_fit.pdf' % (chip_num+1,med_size,int(do_dither)))
 
 	plt.figure()
-	plt.imshow(tps_data, extent=(0, im_size[0], 0, im_size[1]))
+ 	plt.imshow(zz, extent=(0, im_size[0], 0, im_size[1]))
 	plt.colorbar()
-	plt.savefig('/Users/matt/Desktop/backs/chip%i_back%i_tps.pdf' % (chip_num+1,med_size))
+# 	plt.xlim(0,im_size[0])
+# 	plt.ylim(0,im_size[1])
+	plt.savefig('/Users/matt/Desktop/backs/chip%i_back%i_d%i_tps.pdf' % (chip_num+1,med_size,int(do_dither)))
 
-	image = image - tps_data
-	
-	return image, tps_data
-#	q.put([image, tps_data])
+
+	image = image - zz
+	print "Time for Chip#%i background subtraction = %f seconds." % (chip_num+1, time.time()-back_time)
+
+	return image, zz
+# 	q.put([image, tps_data])
 
 def rebin(array,shape):
 	sh = shape[0],array.shape[0]//shape[0],shape[1],array.shape[1]//shape[1]
@@ -456,13 +455,31 @@ del mask_im_data
 # plt.colorbar()
 # plt.title("Inpainted NaNs")
 
-# zz = np.zeros( (len(back_im_cube), im_size[0], im_size[1]) )
+# start_time_fit = time.time()
+# 
+# zz = np.zeros( (1, im_size[0], im_size[1]) )
 # med_size=320
-# for kk in range(1):
+# 
+# z_chk = []
+# for ii in range(len(back_im_cube)):
+# 	z_chk.append([])
+# 
+# # for ii in range(len(back_im_cube)):
+# # 	for jj in range(10):
+# # 		z_chk[ii].append(jj)
+# # #	z_chk[ii].append(stats.nanmedian(back_im_cube[ii][0],axis=None))
+# # print z_chk
+# # 
+# # for ii in range(len(back_im_cube)):
+# # 	print z_chk[ii]
+# # exit()
+# 
+# cnt = 0
+# for kk in range(len(back_im_cube)):
 # 	xx = 0
 # 	x_chk = []
 # 	y_chk = []
-# 	z_chk = []
+# #	z_chk = []
 # 	while xx < im_size[0]:
 # 		x_chk_size = med_size
 # 		if xx+x_chk_size > im_size[0]: x_chk_size = im_size[0]-xx
@@ -472,51 +489,68 @@ del mask_im_data
 # 			if yy+y_chk_size > im_size[1]: y_chk_size = im_size[1]-yy
 # 			x_chk.append(int(xx+x_chk_size/2))
 # 			y_chk.append(int(yy+y_chk_size/2))
-# 			z_chk.append(stats.nanmedian(back_im_cube[0][0][xx:xx+x_chk_size,yy:yy+y_chk_size],axis=None))
+# 			z_chk[cnt].append(stats.nanmedian(back_im_cube[kk][0][xx:xx+x_chk_size,yy:yy+y_chk_size],axis=None))
 # 			yy+=y_chk_size
 # 		xx+=x_chk_size
+# 	cnt+=1
 # 
-# 	x_chk = np.array(x_chk)
-# 	y_chk = np.array(y_chk)
-# 	z_chk = np.array(z_chk)
-# 	mask = np.where(np.isnan(z_chk) != True,1,0)
-# 	x_chk = np.compress(mask,x_chk)
-# 	y_chk = np.compress(mask,y_chk)
-# 	z_chk = np.compress(mask,z_chk)
-# 	mask = np.where(z_chk >= 0.0,1,0)
-# 	x_chk = np.compress(mask,x_chk)
-# 	y_chk = np.compress(mask,y_chk)
-# 	z_chk = np.compress(mask,z_chk)
+# # for ii in range(len(back_im_cube)):
+# # 	print z_chk[ii][0:5]
+# # #for ii in range(len(z_chk[0])):
+# # print [z_chk[jj][0] for jj in range(len(z_chk))]
+# # print np.median([z_chk[jj][0] for jj in range(len(z_chk))]), np.median([z_chk[jj][1] for jj in range(len(z_chk))])
+# # #print len(z_chk[:][0])
+# # #exit()
 # 
-# 	nx, ny = 10, 10
-# 	xx, yy = np.meshgrid(np.arange(0, im_size[0], nx), 
-# 						 np.arange(0, im_size[1], ny))
+# x_chk = np.array(x_chk)
+# y_chk = np.array(y_chk)
+# z_chk = np.array(z_chk)
+# # 	mask = np.where(np.isnan(z_chk) != True,1,0)
+# # 	x_chk = np.compress(mask,x_chk)
+# # 	y_chk = np.compress(mask,y_chk)
+# # 	z_chk = np.compress(mask,z_chk)
+# # 	mask = np.where(z_chk >= 0.0,1,0)
+# # 	x_chk = np.compress(mask,x_chk)
+# # 	y_chk = np.compress(mask,y_chk)
+# # 	z_chk = np.compress(mask,z_chk)
 # 
-# 	tps = interpolate.Rbf(x_chk,y_chk,z_chk,function='thin_plate')#'thin_plate')
-# 	print "Interpolation done..."
+# z_fit = []
+# for ii in range(len(z_chk[0])):#range(len(z_chk[0])):
+# 	print np.median([z_chk[jj][ii] for jj in range(len(z_chk))])
+# 	z_fit.append(np.median([z_chk[jj][ii] for jj in range(len(z_chk))]))
+# 
+# z_fit = np.array(z_fit)
+# 
+# nx, ny = 10, 10
+# xx, yy = np.meshgrid(np.arange(0, im_size[0], nx), 
+# 					 np.arange(0, im_size[1], ny))
+# 
+# tps = interpolate.Rbf(x_chk,y_chk,z_fit,function='thin_plate')#'thin_plate')
+# print "Interpolation done..."
 # #	print tps
 # 
-# 	zz_i = tps(xx,yy)
+# zz_i = tps(xx,yy)
 # 
-# 	xx, yy = np.meshgrid(np.arange(0, im_size[0], 1), 
-# 						 np.arange(0, im_size[1], 1))
+# xx, yy = np.meshgrid(np.arange(0, im_size[0], 1), 
+# 					 np.arange(0, im_size[1], 1))
 # 
-# 	zz = tps(xx,yy)
-# 	print zz
+# zz = tps(xx,yy)
+# print zz
 # 
-# 	print "Plotting..."
-# 	plt.figure()
-# 	plt.subplot(211)
-# 	plt.imshow(zz_i, extent=(0, im_size[0], 0, im_size[1]))
-# 	plt.colorbar()
-# 	plt.subplot(212)
-# 	plt.scatter(x_chk, y_chk, c=z_chk)
-# 	plt.colorbar()
-# 	plt.xlim(0,im_size[0])
-# 	plt.ylim(0,im_size[1])
-# 	plt.savefig('/Users/matt/Desktop/backs/chip1_back320__f1_tps.pdf')# % (chip_num,med_size,kk))
+# print "Plotting..."
+# plt.figure()
+# plt.subplot(211)
+# plt.imshow(zz_i, extent=(0, im_size[0], 0, im_size[1]))
+# plt.colorbar()
+# plt.subplot(212)
+# plt.scatter(x_chk, y_chk, c=z_fit)
+# plt.colorbar()
+# plt.xlim(0,im_size[0])
+# plt.ylim(0,im_size[1])
+# #plt.savefig('/Users/matt/Desktop/backs/chip1_back320__f1_tps.pdf')# % (chip_num,med_size,kk))
+# plt.show()
 # 
-# print time.time() - start_time
+# print time.time() - start_time_fit
 # exit()
 
 ########################################################################
@@ -530,12 +564,12 @@ del mask_im_data
 # # 	print np.median([back_im_cube[kk][ii][:][:] for kk in range(len(back_im_cube))])
 #  	print im_data[0][ii][0][0]
 
-if sys.argv[1] == "median" or sys.argv[1] == "median global":
+if sys.argv[1] == "median" or sys.argv[1] == "median global":# or sys.argv[1] == "dynamic tps":
 	q = Queue()
 	results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
 	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
 
-	n_procs_max = 10
+	n_procs_max = 1
 	chip_start = 0
 	max_chips = 1
 	procs = []
@@ -551,8 +585,8 @@ if sys.argv[1] == "median" or sys.argv[1] == "median global":
 		  #print "Proc %i start" % (chip_num+1+chip_start)
 		  if sys.argv[1] == "bispline":
 			  procs.append(Process(target=bspline_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
-	# 	  if sys.argv[1] == "tps":
-	# 	  	  procs.append(Process(target=tps_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
+# 	 	  if sys.argv[1] == "dynamic tps":
+# 	 	  	  procs.append(Process(target=tps_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
 
 		  procs[chip_num+chip_start].start()
 		  time.sleep(3.0)
@@ -568,9 +602,9 @@ if sys.argv[1] == "median" or sys.argv[1] == "median global":
 
 if sys.argv[1] == "dynamic tps":
 	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
-	for chip_num in range(30):#range(im_nchip):
+	for chip_num in range(1):#range(im_nchip):
 		print "Processing Chip #%i..." % (chip_num+1)
-		im_data[0][chip_num], med_back_data[0][chip_num] = tps_subtract(back_im_cube,med_back_data[0][chip_num],im_data[0][chip_num],chip_num)
+		im_data[0][chip_num], med_back_data[0][chip_num] = tps_subtract(back_im_cube,im_data[0][chip_num],chip_num)
 
 # for ii in range(10):
 #  	print "Chip #%i after subtraction:" % (ii+1)
