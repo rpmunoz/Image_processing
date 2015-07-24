@@ -26,15 +26,21 @@ def find_nearest(array,nvals,val):
 	return inds
 
 def median_subtract(back_cube,med_data,image,chip_num,q):
+# 	for kk in range(len(back_cube)):
+# 		print "Inpainting image %i..." % kk
+# 		back_cube[kk][chip_num] = inpaint.replace_nans(back_cube[kk][chip_num], 5, 20, 1, 'localmean')
+	print "Calculating medians..."
 	for ii in range(im_size[0]):
 		for jj in range(im_size[1]):
-			back_val = np.median([back_cube[kk][chip_num][ii][jj] for kk in range(len(back_cube))])
-			if np.isnan(back_val) == False:
-				back_val_safe = back_val
-				med_data[ii][jj] = back_val
-			else:
-				med_data[ii][jj] = back_val_safe
+			med_data[ii][jj] = np.median([back_cube[kk][chip_num][ii][jj] for kk in range(len(back_cube))])
+# 			back_val = np.median([back_cube[kk][chip_num][ii][jj] for kk in range(len(back_cube))])
+# 			if np.isnan(back_val) == False:
+# 				back_val_safe = back_val
+# 				med_data[ii][jj] = back_val
+# 			else:
+# 				med_data[ii][jj] = back_val_safe
 
+	print "Subtracting background..."
 	image = image-med_data
 	q.put([image, med_data])
 
@@ -42,52 +48,159 @@ def median_global_subtract(back_cube,med_data,image,chip_num,q):
 	med_data[:][:] = np.median([back_cube[kk][chip_num] for kk in range(len(back_cube))])
 	image = image-med_data
 	q.put([image, med_data])
+	
+def tps_subtract(back_cube,tps_data,image,chip_num):
+	zz = np.zeros( (len(back_cube), im_size[0], im_size[1]) )
+	med_size = 320
+
+	nx, ny = 100, 100
+	xx1, yy1 = np.meshgrid(np.arange(0, im_size[0], nx), 
+						 np.arange(0, im_size[1], ny))
+
+	xx2, yy2 = np.meshgrid(np.arange(0, im_size[0], 1), 
+						 np.arange(0, im_size[1], 1))
+
+	for kk in range(len(back_cube)):
+		print "Background frame # %i/%i:" % (kk+1,len(back_cube))
+		xx = 0
+		x_chk = []
+		y_chk = []
+		z_chk = []
+		while xx < im_size[0]:
+			x_chk_size = med_size
+			if xx+x_chk_size > im_size[0]: x_chk_size = im_size[0]-xx
+			yy = 0
+			while yy < im_size[1]:
+				y_chk_size=med_size
+				if yy+y_chk_size > im_size[1]: y_chk_size = im_size[1]-yy
+				x_chk.append(int(xx+x_chk_size/2))
+				y_chk.append(int(yy+y_chk_size/2))
+				z_chk.append(stats.nanmedian(back_cube[kk][chip_num][xx:xx+x_chk_size,yy:yy+y_chk_size],axis=None))
+#				z_chk.append(stats.nanmedian(back_cube[0][0][xx:xx+x_chk_size,yy:yy+y_chk_size],axis=None))
+ 				if yy+y_chk_size < im_size[1]: 
+ 					yy+=y_chk_size-5
+				else:
+					yy+=y_chk_size
+ 			if xx+x_chk_size < im_size[0]:
+ 				xx+=x_chk_size-5
+ 			else:
+				xx+=x_chk_size
+
+		x_chk = np.array(x_chk)
+		y_chk = np.array(y_chk)
+		z_chk = np.array(z_chk)
+		mask = np.where(np.isnan(z_chk) != True,1,0)
+		x_chk = np.compress(mask,x_chk)
+		y_chk = np.compress(mask,y_chk)
+		z_chk = np.compress(mask,z_chk)
+		mask = np.where(z_chk >= 0.0,1,0)
+		x_chk = np.compress(mask,x_chk)
+		y_chk = np.compress(mask,y_chk)
+		z_chk = np.compress(mask,z_chk)
+
+# 		nx, ny = 100, 100
+# 		xx, yy = np.meshgrid(np.arange(0, im_size[0], nx), 
+# 							 np.arange(0, im_size[1], ny))
+#		print "Interpolating..."
+		tps = interpolate.Rbf(x_chk,y_chk,z_chk,function='thin_plate')#'thin_plate')
+		print "		Interpolation done..."
+
+		zz_i = tps(xx1,yy1)
+
+		print "		Plotting..."
+		plt.figure()
+		plt.subplot(211)
+		plt.imshow(zz_i, extent=(0, im_size[0], 0, im_size[1]))
+		plt.colorbar()
+		plt.subplot(212)
+		plt.scatter(x_chk, y_chk, c=z_chk)
+		plt.colorbar()
+		plt.xlim(0,im_size[0])
+		plt.ylim(0,im_size[1])
+		plt.savefig('/Users/matt/Desktop/backs/chip%i_back%i_f%i_tps.pdf' % (chip_num+1,med_size,kk+1))
+
+		print "		Filling dithers..."
+# 		xx, yy = np.meshgrid(np.arange(0, im_size[0], 1), 
+# 							 np.arange(0, im_size[1], 1))
+		zz[kk] = tps(xx2,yy2).T
+# 		for ii in range(im_size[0]):
+# 			for jj in range(im_size[1]):
+# 				zz[kk][ii][jj] = tps(ii,jj)
+
+	print "		Finding median..."
+	for ii in range(im_size[0]):
+		for jj in range(im_size[1]):
+			tps_data[ii][jj] = np.median([zz[kk][ii][jj] for kk in range(len(back_cube))])
+
+	plt.figure()
+	plt.imshow(tps_data, extent=(0, im_size[0], 0, im_size[1]))
+	plt.colorbar()
+	plt.savefig('/Users/matt/Desktop/backs/chip%i_back%i_tps.pdf' % (chip_num+1,med_size))
+
+	image = image - tps_data
+	
+	return image, tps_data
+#	q.put([image, tps_data])
+
+def rebin(array,shape):
+	sh = shape[0],array.shape[0]//shape[0],shape[1],array.shape[1]//shape[1]
+	return array.reshape(sh).nanmean(-1).nanmean(1)
 
 import pyfits
 import numpy as np
 import glob
 from multiprocessing import Process, Queue
 import matplotlib.pyplot as plt
-# from scipy import interpolate
-# from scipy import ndimage
-# from mpl_toolkits.mplot3d import Axes3D
-# from matplotlib import cm
+import matplotlib.mlab as mlab
+from scipy import interpolate, stats
+import itertools
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
 import os,sys,subprocess
 import time
+#from random import randint
+import random
+import inpaint
 
 start_time = time.time()
 
 if len(sys.argv) < 2 :
 	print "ERROR - missing subtraction method"
 	exit()
-if sys.argv[1] != "median":
-	if sys.argv[1] != "median global":
-		print "ERROR - background subtraction method must be one of [median, median global]"
-		exit()
+# if sys.argv[1] != "median":
+# 	if sys.argv[1] != "median global":
+# 		if sys.argv[1] != "bispline":
+# 			print "ERROR - background subtraction method must be one of [median, median global, bispline]"
+# 			exit()
 
-# im_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
-# im_dir = '/Volumes/Q6/matt/2014A-0610/pipeline/images/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
-# do_tile = '3'
-# do_dither = '3'
-# do_filt = 'i'
-# n_backs = 7
+if sys.argv[1] not in ["median", "median global", "bispline", "dynamic tps"]:
+	print "ERROR - background subtraction method must be one of [median, median global, bispline, tps]"
+	exit()
 
-im_dir = sys.argv[2]
-do_tile = sys.argv[3]
-do_dither = sys.argv[4]
-do_filt = sys.argv[5]
-n_backs = int(sys.argv[6])
-ss_im_out = sys.argv[7]
-sky_im_out = sys.argv[8]
+im_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+#im_dir = '/Volumes/Q6/matt/2014A-0610/pipeline/images/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+do_tile = '1'
+do_dither = '1'
+do_filt = 'i'
+n_backs = 7
+
+# im_dir = sys.argv[2]
+# do_tile = sys.argv[3]
+# do_dither = sys.argv[4]
+# do_filt = sys.argv[5]
+# n_backs = int(sys.argv[6])
+# ss_im_out = sys.argv[7]
+# sky_im_out = sys.argv[8]
 
 #back_dir = '/Volumes/MyPassport/masks/'
 #mask_dir = '/Volumes/MyPassport/masks/'
-#back_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
-#mask_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+back_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
+mask_dir = '/Volumes/Q6/matt/2014A-0610/background_test_files/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
 #back_dir = '/Volumes/Q6/matt/2014A-0610/pipeline/images/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
 #mask_dir = '/Volumes/Q6/matt/2014A-0610/pipeline/images/' #'/Volumes/Q6/matt/2014A-0610/pipeline/images/'
-back_dir = im_dir
-mask_dir = im_dir
+
+# back_dir = im_dir
+# mask_dir = im_dir
 
 test_image = im_dir+'survey_t'+do_tile+'_d'+do_dither+'_'+do_filt+'_short.fits'
 test_weight = im_dir+'survey_t'+do_tile+'_d'+do_dither+'_'+do_filt+'_short.WEIGHT.fits'
@@ -102,8 +215,8 @@ hdulist = pyfits.open(test_image)
 im_nchip=0
 for hdu in hdulist:
 	if hdu.header['NAXIS'] != 0:
-		hdu = np.array(hdu)
-		im_dim= (4094, 2046) #hdu.shape
+#		hdu = np.array(hdu)
+		im_dim = np.array(hdu.data).shape#(4096,2048)#(4094, 2046) #hdu.shape
 		im_ndim=len(im_dim)
 		if im_ndim==2:
 			if im_nchip==0: im_size=im_dim
@@ -121,6 +234,21 @@ im_data = load_im(test_image,im_data)
 #del w_im_data
 
 # print np.max(im_data[0][0])
+
+# z = im_data[0][0]
+# 
+# myspline = interpolate.RectBivariateSpline(x, y, z, kx=2,ky=2,s=0)
+# splineout = myspline(x,y)
+# print splineout[0][0], im_data[0][0][0][0]
+# print time.time() - start_time
+# exit()
+# 
+# fig = plt.figure()
+# ax = fig.gca(projection='3d')
+# surf = ax.plot_surface(xx, yy, splineout, rstride=1, cstride=1, cmap=cm.coolwarm, antialiased=False)
+# print time.time() - start_time
+# plt.show()
+# exit()
 
 ####################################################################
 ####Open background and mask files and scale them by weight maps####
@@ -240,6 +368,8 @@ for ii in range(len(back_ims)):
 # del back_w_data
 
 #Load mask images and mask the background images
+
+
 for ii in range(len(mask_ims)):
 	print "\nMasking background image %i/%i..." % (ii+1,len(mask_ims))
 	mask_im_temp = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
@@ -248,8 +378,146 @@ for ii in range(len(mask_ims)):
 	for jj in range(len(back_im_cube[0])):
 		bv_mask = (mask_im_data[0][jj] == 1.)
 		back_im_cube[ii][jj][bv_mask] = np.nan
-	
+
+# plt.figure()
+# plt.imshow(back_im_cube[0][0])#,vmin=np.min(back_im_cube[0][0]),vmax=500)
+# plt.colorbar()
+
+if sys.argv[1] == "median":
+	for kk in range(len(back_im_cube)):
+		print "Filling NaNs, background image %i/%i..." % (kk+1,len(back_im_cube))
+		for jj in range(11):#range(im_nchip):
+
+			chip_disp = stats.nanstd(back_im_cube[kk][jj],axis=None)
+# 	print chip_disp
+
+	#	nan_fill = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+	# for ii in range(im_size[0]):
+	# 	for jj in range(im_size[1]):
+	# #		for kk in range(im_nchip):	
+	# 		nan_fill[0][0][ii][jj] = random.uniform(np.median(back_im_cube[0][0])-chip_disp,np.median(back_im_cube[0][0])+chip_disp)
+
+# 	print stats.nanmedian(back_im_cube[0][0],axis=None)
+# 	print random.uniform(stats.nanmedian(back_im_cube[0][0],axis=None)-chip_disp,stats.nanmedian(back_im_cube[0][0],axis=None)+chip_disp)#nan_fill[0][0][bv_mask]
+
+			mask_im_temp = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+			mask_im_data = load_im(mask_ims[kk],mask_im_temp)
+
+			bv_mask = (mask_im_data[0][0] == 1.)
+			back_im_cube[kk][jj][bv_mask] = random.uniform(stats.nanmedian(back_im_cube[kk][jj],axis=None)-chip_disp,stats.nanmedian(back_im_cube[kk][jj],axis=None)+chip_disp)#nan_fill[0][0][bv_mask]
+# 
+# plt.figure()
+# plt.imshow(back_im_cube[0][0])#,vmin=np.min(back_im_cube[0][0]),vmax=500)
+# plt.colorbar()
+
+
 del mask_im_data
+
+# filled = inpaint.replace_nans(back_im_cube[0][0], 5, 0.5, 1, 'localmean')
+# plt.figure()
+# plt.imshow(np.log10(back_im_cube[0][0]))
+# plt.colorbar()
+# plt.figure()
+# plt.imshow(np.log10(filled))
+# plt.colorbar()
+# plt.show()
+# exit()
+# 
+# 
+# N = 2000
+# x_chk = []
+# y_chk = []
+# z_chk = []
+# n_samp = 0
+# while n_samp < N:
+# 	xx = randint(0,im_size[0]-1)
+# 	yy = randint(0,im_size[1]-1)
+# 	if xx not in x_chk and yy not in y_chk:
+# 		#print xx, yy
+# 		if np.isnan(back_im_cube[0][0][xx][yy]) != True:
+# 			x_chk.append(xx)
+# 			y_chk.append(yy)
+# 			z_chk.append(back_im_cube[0][0][xx][yy])
+# 			n_samp+=1
+# x_chk = np.array(x_chk)
+# y_chk = np.array(y_chk)
+# z_chk = np.array(z_chk)
+
+# plt.figure()
+# plt.imshow(np.log10(back_im_cube[0][0]))
+# plt.colorbar()
+# plt.title("With NaNs")
+# 
+# print "Inpainting..."
+# back_im_cube[0][0] = inpaint.replace_nans(back_im_cube[0][0], 1, 0.5, 1, 'idw')
+# 
+# plt.figure()
+# plt.imshow(np.log10(back_im_cube[0][0]))
+# plt.colorbar()
+# plt.title("Inpainted NaNs")
+
+# zz = np.zeros( (len(back_im_cube), im_size[0], im_size[1]) )
+# med_size=320
+# for kk in range(1):
+# 	xx = 0
+# 	x_chk = []
+# 	y_chk = []
+# 	z_chk = []
+# 	while xx < im_size[0]:
+# 		x_chk_size = med_size
+# 		if xx+x_chk_size > im_size[0]: x_chk_size = im_size[0]-xx
+# 		yy = 0
+# 		while yy < im_size[1]:
+# 			y_chk_size=med_size
+# 			if yy+y_chk_size > im_size[1]: y_chk_size = im_size[1]-yy
+# 			x_chk.append(int(xx+x_chk_size/2))
+# 			y_chk.append(int(yy+y_chk_size/2))
+# 			z_chk.append(stats.nanmedian(back_im_cube[0][0][xx:xx+x_chk_size,yy:yy+y_chk_size],axis=None))
+# 			yy+=y_chk_size
+# 		xx+=x_chk_size
+# 
+# 	x_chk = np.array(x_chk)
+# 	y_chk = np.array(y_chk)
+# 	z_chk = np.array(z_chk)
+# 	mask = np.where(np.isnan(z_chk) != True,1,0)
+# 	x_chk = np.compress(mask,x_chk)
+# 	y_chk = np.compress(mask,y_chk)
+# 	z_chk = np.compress(mask,z_chk)
+# 	mask = np.where(z_chk >= 0.0,1,0)
+# 	x_chk = np.compress(mask,x_chk)
+# 	y_chk = np.compress(mask,y_chk)
+# 	z_chk = np.compress(mask,z_chk)
+# 
+# 	nx, ny = 10, 10
+# 	xx, yy = np.meshgrid(np.arange(0, im_size[0], nx), 
+# 						 np.arange(0, im_size[1], ny))
+# 
+# 	tps = interpolate.Rbf(x_chk,y_chk,z_chk,function='thin_plate')#'thin_plate')
+# 	print "Interpolation done..."
+# #	print tps
+# 
+# 	zz_i = tps(xx,yy)
+# 
+# 	xx, yy = np.meshgrid(np.arange(0, im_size[0], 1), 
+# 						 np.arange(0, im_size[1], 1))
+# 
+# 	zz = tps(xx,yy)
+# 	print zz
+# 
+# 	print "Plotting..."
+# 	plt.figure()
+# 	plt.subplot(211)
+# 	plt.imshow(zz_i, extent=(0, im_size[0], 0, im_size[1]))
+# 	plt.colorbar()
+# 	plt.subplot(212)
+# 	plt.scatter(x_chk, y_chk, c=z_chk)
+# 	plt.colorbar()
+# 	plt.xlim(0,im_size[0])
+# 	plt.ylim(0,im_size[1])
+# 	plt.savefig('/Users/matt/Desktop/backs/chip1_back320__f1_tps.pdf')# % (chip_num,med_size,kk))
+# 
+# print time.time() - start_time
+# exit()
 
 ########################################################################
 ####Calculate the background level from all of the background images####
@@ -259,35 +527,59 @@ del mask_im_data
 #  	print "Chip #%i before subtraction:" % (ii+1)
 # # 	print back_im_cube[0][ii][0][0], back_im_cube[1][ii][0][0], back_im_cube[2][ii][0][0]
 # # 	print np.median([back_im_cube[0][ii][0][0], back_im_cube[1][ii][0][0], back_im_cube[2][ii][0][0]])
-#  	print np.median([back_im_cube[kk][ii][:][:] for kk in range(len(back_im_cube))])
+# # 	print np.median([back_im_cube[kk][ii][:][:] for kk in range(len(back_im_cube))])
 #  	print im_data[0][ii][0][0]
 
-q = Queue()
-results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
-med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+if sys.argv[1] == "median" or sys.argv[1] == "median global":
+	q = Queue()
+	results = np.zeros( (im_nchip, 2, im_size[0], im_size[1]) )
+	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
 
-n_procs_max = 10
-chip_start = 0
-max_chips = 60
-procs = []
+	n_procs_max = 10
+	chip_start = 0
+	max_chips = 1
+	procs = []
 
-while chip_start < max_chips:#im_nchips:
-	print "Processing Chip #%i-%i..." % (chip_start+1, chip_start+n_procs_max)
-	for chip_num in range(n_procs_max):
-#  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
-	  if sys.argv[1] == "median":
-		  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
-	  if sys.argv[1] == "median global":
-  		  procs.append(Process(target=median_global_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
-	  #print "Proc %i start" % (chip_num+1+chip_start)
-	  procs[chip_num+chip_start].start()
-	  time.sleep(3.0)
-	for chip_num in range(n_procs_max):
-	  #print "Queue %i start" % (chip_num+1+chip_start)
-	  results[chip_num+chip_start] = q.get()#result1 = q.get()
-	  im_data[0][chip_num+chip_start] = results[chip_num+chip_start][0] #result1[0]
-	  med_back_data[0][chip_num+chip_start] = results[chip_num+chip_start][1] #result1[1]
-	chip_start+=n_procs_max
+	while chip_start < max_chips:#im_nchips:
+		print "Processing Chip #%i-%i..." % (chip_start+1, chip_start+n_procs_max)
+		for chip_num in range(n_procs_max):
+	#  	  print "Processing Chip #%i" % (chip_num+1+chip_start)
+		  if sys.argv[1] == "median":
+			  procs.append(Process(target=median_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
+		  if sys.argv[1] == "median global":
+			  procs.append(Process(target=median_global_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
+		  #print "Proc %i start" % (chip_num+1+chip_start)
+		  if sys.argv[1] == "bispline":
+			  procs.append(Process(target=bspline_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
+	# 	  if sys.argv[1] == "tps":
+	# 	  	  procs.append(Process(target=tps_subtract, args=(back_im_cube,med_back_data[0][chip_num+chip_start],im_data[0][chip_num+chip_start],chip_num+chip_start,q)))
+
+		  procs[chip_num+chip_start].start()
+		  time.sleep(3.0)
+		for chip_num in range(n_procs_max):
+		  #print "Queue %i start" % (chip_num+1+chip_start)
+		  results[chip_num+chip_start] = q.get()#result1 = q.get()
+		  im_data[0][chip_num+chip_start] = results[chip_num+chip_start][0] #result1[0]
+		  med_back_data[0][chip_num+chip_start] = results[chip_num+chip_start][1] #result1[1]
+		chip_start+=n_procs_max
+
+#Spline surface background subtraction
+#Fit a spline to the surface of each chip, for each background image
+
+if sys.argv[1] == "dynamic tps":
+	med_back_data = np.zeros( (1, im_nchip, im_size[0], im_size[1]) )
+	for chip_num in range(30):#range(im_nchip):
+		print "Processing Chip #%i..." % (chip_num+1)
+		im_data[0][chip_num], med_back_data[0][chip_num] = tps_subtract(back_im_cube,med_back_data[0][chip_num],im_data[0][chip_num],chip_num)
+
+# for ii in range(10):
+#  	print "Chip #%i after subtraction:" % (ii+1)
+# # 	print back_im_cube[0][ii][0][0], back_im_cube[1][ii][0][0], back_im_cube[2][ii][0][0]
+# # 	print np.median([back_im_cube[0][ii][0][0], back_im_cube[1][ii][0][0], back_im_cube[2][ii][0][0]])
+# # 	print np.median([back_im_cube[kk][ii][:][:] for kk in range(len(back_im_cube))])
+#  	print im_data[0][ii][0][0], med_back_data[0][ii][0][0]
+
+#exit()
 
 #Save the background subtracted image and the background image
 hdulist = pyfits.open(test_image)
@@ -296,20 +588,16 @@ print "Saving image data..."
 hdulist_out = hdulist
 for ii in range(im_nchip):
 	hdulist_out[ii+1].data = im_data[0][ii]
-#hdulist_out.writeto('/Users/matt/Desktop/deleteme_image.fits',clobber=True)
-hdulist_out.writeto('%s' % ss_im_out,clobber=True)
+hdulist_out.writeto('/Users/matt/Desktop/deleteme_image.fits',clobber=True)
+#hdulist_out.writeto('%s' % ss_im_out,clobber=True)
 hdulist_out.close()
 
 print "Saving background data..."
 hdulist_back_out = hdulist
 for ii in range(im_nchip):
 	hdulist_back_out[ii+1].data = med_back_data[0][ii]
-#hdulist_back_out.writeto('/Users/matt/Desktop/deleteme_back.fits',clobber=True)
-hdulist_back_out.writeto('%s' % sky_im_out,clobber=True)
+hdulist_back_out.writeto('/Users/matt/Desktop/deleteme_back.fits',clobber=True)
+#hdulist_back_out.writeto('%s' % sky_im_out,clobber=True)
 hdulist_back_out.close()
 
 print "Done in %5.2f seconds." % (time.time() - start_time)
-
-#Spline surface background subtraction
-#Fit a spline to the surface of each chip, for each background image
-
